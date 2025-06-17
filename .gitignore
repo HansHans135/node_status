@@ -1,2 +1,4 @@
 client/monitor.db
 ._*
+.DS_Store
+client/__pycache__/*

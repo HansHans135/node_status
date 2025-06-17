@@ -4,110 +4,297 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maybe Is Free Status</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-in-out',
+                        'slide-up': 'slideUp 0.3s ease-out',
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        .node-card {
-            transition: all 0.3s ease;
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
-        .node-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        .usage-bar {
-            height: 10px;
-            border-radius: 5px;
-        }
-        .progress-bar {
-            transition: width 1s ease-in-out;
+        @keyframes slideUp {
+            from { transform: translateY(10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
     </style>
 </head>
-<body class="bg-light">
-    <div class="container py-4">
-        <h1 class="text-center mb-4">Maybe Is Free Status</h1>
-        
-        <!-- 新增節點 -->
-         <!--
-        <div class="text-end mb-4">
-            <a href="/add" class="btn btn-primary">新增節點</a>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-800 mb-4">
+                <i class="fas fa-server text-blue-600 mr-3"></i>
+                Maybe Is Free Status
+            </h1>
+            <p class="text-gray-600 text-lg">即時監控系統狀態</p>
+            <div class="mt-6 space-x-4">
+                <div id="loginButtons" class="hidden">
+                    <a href="/add" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center">
+                        <i class="fas fa-plus mr-2"></i>
+                        新增節點
+                    </a>
+                    <button onclick="logout()" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors inline-flex items-center">
+                        <i class="fas fa-sign-out-alt mr-2"></i>
+                        登出
+                    </button>
+                </div>
+                <div id="guestButtons">
+                    <a href="/login" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center">
+                        <i class="fas fa-sign-in-alt mr-2"></i>
+                        登入管理
+                    </a>
+                </div>
+            </div>
         </div>
-        -->
+        
+        <div id="nodesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- card -->
+        </div>
 
-        <!-- 節點列表 -->
-        <div id="nodesList" class="row g-4">
-            
+        <div id="loadingState" class="flex justify-center items-center h-64">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <span class="ml-3 text-gray-600">載入中...</span>
+        </div>
+
+        <div id="errorState" class="hidden text-center py-12">
+            <i class="fas fa-exclamation-triangle text-red-500 text-4xl mb-4"></i>
+            <p class="text-gray-600">無法載入節點資料</p>
+            <button onclick="fetchNodes()" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                重新載入
+            </button>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // 获取所有节点数据
+        let isLoggedIn = false;
+
+        function checkLoginStatus() {
+            fetch('/api/check-login')
+                .then(response => response.json())
+                .then(data => {
+                    isLoggedIn = data.logged_in;
+                    updateUI();
+                })
+                .catch(error => {
+                    console.error('Error checking login status:', error);
+                    isLoggedIn = false;
+                    updateUI();
+                });
+        }
+
+        function updateUI() {
+            const loginButtons = document.getElementById('loginButtons');
+            const guestButtons = document.getElementById('guestButtons');
+            
+            if (isLoggedIn) {
+                loginButtons.classList.remove('hidden');
+                guestButtons.classList.add('hidden');
+            } else {
+                loginButtons.classList.add('hidden');
+                guestButtons.classList.remove('hidden');
+            }
+        }
+
+        function logout() {
+            fetch('/api/logout', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        isLoggedIn = false;
+                        updateUI();
+                    }
+                })
+                .catch(error => {
+                    console.error('Logout error:', error);
+                });
+        }
+
         function fetchNodes() {
+            const loadingState = document.getElementById('loadingState');
+            const errorState = document.getElementById('errorState');
+            const nodesList = document.getElementById('nodesList');
+            
+            loadingState.classList.remove('hidden');
+            errorState.classList.add('hidden');
+            
             fetch('/api/nodes')
                 .then(response => response.json())
                 .then(nodes => {
-                    const nodesList = document.getElementById('nodesList');
+                    loadingState.classList.add('hidden');
                     nodesList.innerHTML = '';
-                    nodes.forEach(node => {
+                    
+                    if (nodes.length === 0) {
+                        nodesList.innerHTML = `
+                            <div class="col-span-full text-center py-12">
+                                <i class="fas fa-inbox text-gray-400 text-4xl mb-4"></i>
+                                <p class="text-gray-600">目前沒有節點資料</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    nodes.forEach((node, index) => {
                         const lastSeen = new Date(node.last_seen);
-                        const timeDiff = Math.round((new Date() - lastSeen) / 1000)-60*60*8;
+                        const timeDiff = Math.round((new Date() - lastSeen) / 1000) - 60*60*8;
+                        
+                        const isOnline = timeDiff < 300;
+                        const statusColor = isOnline ? 'bg-green-500' : 'bg-red-500';
+                        const statusText = isOnline ? '在線' : '離線';
                         
                         const card = document.createElement('div');
-                        card.className = 'col-md-4';
+                        card.className = 'animate-slide-up';
+                        card.style.animationDelay = `${index * 0.1}s`;
+                        
+                        const actionButtons = isLoggedIn ? `
+                            <button onclick="editNode(${node.id})" 
+                                    class="text-blue-200 hover:text-white hover:bg-blue-500 p-1 rounded transition-colors mr-1"
+                                    title="編輯節點">
+                                <i class="fas fa-edit text-sm"></i>
+                            </button>
+                            <button onclick="deleteNode(${node.id}, '${node.name}')" 
+                                    class="text-red-200 hover:text-white hover:bg-red-500 p-1 rounded transition-colors"
+                                    title="刪除節點">
+                                <i class="fas fa-trash text-sm"></i>
+                            </button>
+                        ` : '';
+                        
                         card.innerHTML = `
-                            <div class="card node-card h-100">
-                                <div class="card-body">
-                                    <h5 class="card-title">${node.name}</h5>
-                                    <p class="card-text small text-muted">伺服器ID: ${node.server_id}</p>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label d-flex justify-content-between">
-                                            <span>CPU使用率</span>
-                                            <span>${node.cpu_usage ? node.cpu_usage.toFixed(1) + '%' : 'N/A'}</span>
-                                        </label>
-                                        <div class="progress usage-bar">
-                                            <div class="progress-bar" role="progressbar" style="width: ${node.cpu_usage || 0}%"></div>
+                            <div class="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-200">
+                                <div class="bg-blue-600 text-white p-6 rounded-t-xl">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <h3 class="text-xl font-bold mb-1">${node.name}</h3>
+                                            <p class="text-blue-100 text-sm">ID: ${node.server_id}</p>
+                                        </div>
+                                        <div class="flex items-center space-x-2">
+                                            <div class="flex items-center">
+                                                <div class="w-3 h-3 ${statusColor} rounded-full mr-2 animate-pulse"></div>
+                                                <span class="text-sm font-medium">${statusText}</span>
+                                            </div>
+                                            ${actionButtons}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="p-6">
+                                    <div class="mb-6">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <div class="flex items-center">
+                                                <i class="fas fa-microchip text-blue-600 mr-2"></i>
+                                                <span class="text-gray-700 font-medium">CPU</span>
+                                            </div>
+                                            <span class="text-gray-900 font-bold">${node.cpu_usage ? node.cpu_usage.toFixed(1) + '%' : 'N/A'}</span>
+                                        </div>
+                                        <div class="w-full bg-gray-200 rounded-full h-3">
+                                            <div class="bg-blue-600 h-3 rounded-full transition-all duration-1000 ease-out" 
+                                                 style="width: ${node.cpu_usage || 0}%"></div>
                                         </div>
                                     </div>
 
-                                    <div class="mb-3">
-                                        <label class="form-label d-flex justify-content-between">
-                                            <span>記憶體使用率</span>
-                                            <span>${node.memory_usage ? node.memory_usage.toFixed(1) + '%' : 'N/A'}</span>
-                                        </label>
-                                        <div class="progress usage-bar">
-                                            <div class="progress-bar bg-info" role="progressbar" style="width: ${node.memory_usage || 0}%"></div>
+                                    <div class="mb-6">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <div class="flex items-center">
+                                                <i class="fas fa-memory text-green-600 mr-2"></i>
+                                                <span class="text-gray-700 font-medium">記憶體</span>
+                                            </div>
+                                            <span class="text-gray-900 font-bold">${node.memory_usage ? node.memory_usage.toFixed(1) + '%' : 'N/A'}</span>
+                                        </div>
+                                        <div class="w-full bg-gray-200 rounded-full h-3">
+                                            <div class="bg-green-600 h-3 rounded-full transition-all duration-1000 ease-out" 
+                                                 style="width: ${node.memory_usage || 0}%"></div>
                                         </div>
                                     </div>
 
-                                    <div class="mb-3">
-                                        <label class="form-label d-flex justify-content-between">
-                                            <span>硬碟使用率</span>
-                                            <span>${node.disk_usage ? node.disk_usage.toFixed(1) + '%' : 'N/A'}</span>
-                                        </label>
-                                        <div class="progress usage-bar">
-                                            <div class="progress-bar bg-warning" role="progressbar" style="width: ${node.disk_usage || 0}%"></div>
+                                    <div class="mb-6">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <div class="flex items-center">
+                                                <i class="fas fa-hdd text-orange-600 mr-2"></i>
+                                                <span class="text-gray-700 font-medium">硬碟</span>
+                                            </div>
+                                            <span class="text-gray-900 font-bold">${node.disk_usage ? node.disk_usage.toFixed(1) + '%' : 'N/A'}</span>
+                                        </div>
+                                        <div class="w-full bg-gray-200 rounded-full h-3">
+                                            <div class="bg-orange-600 h-3 rounded-full transition-all duration-1000 ease-out" 
+                                                 style="width: ${node.disk_usage || 0}%"></div>
                                         </div>
                                     </div>
 
-                                    <p class="card-text small text-muted mt-3">
-                                        最後更新: ${timeDiff < 60 ? timeDiff + '秒前' : Math.round(timeDiff/60) + '分鐘前'}
-                                    </p>
+                                    <div class="flex items-center text-gray-500 text-sm pt-4 border-t border-gray-100">
+                                        <i class="fas fa-clock mr-2"></i>
+                                        <span>最後更新: ${timeDiff < 60 ? timeDiff + '秒前' : Math.round(timeDiff/60) + '分鐘前'}</span>
+                                    </div>
                                 </div>
                             </div>
                         `;
                         nodesList.appendChild(card);
                     });
                 })
-                .catch(error => console.error('Error fetching nodes:', error));
+                .catch(error => {
+                    console.error('Error fetching nodes:', error);
+                    loadingState.classList.add('hidden');
+                    errorState.classList.remove('hidden');
+                });
         }
 
+        function editNode(nodeId) {
+            if (!isLoggedIn) {
+                alert('請先登入');
+                return;
+            }
+            window.location.href = `/edit?id=${nodeId}`;
+        }
 
+        function deleteNode(nodeId, nodeName) {
+            if (!isLoggedIn) {
+                alert('請先登入');
+                return;
+            }
+            
+            if (!confirm(`確定要刪除節點 "${nodeName}" 嗎？此操作無法撤銷。`)) {
+                return;
+            }
+            
+            const password = prompt('請輸入密碼以確認刪除：');
+            if (!password) {
+                return;
+            }
+            
+            fetch(`/api/nodes/${nodeId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ password: password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('錯誤：' + data.error);
+                } else {
+                    alert('節點已成功刪除');
+                    fetchNodes();
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting node:', error);
+                alert('刪除節點失敗');
+            });
+        }
 
-        // 定期刷新节点数据
+        // 初始化
+        checkLoginStatus();
         fetchNodes();
-        setInterval(fetchNodes, 10000); // 每10秒更新一次
+        setInterval(fetchNodes, 10000);
     </script>
 </body>
 </html>
